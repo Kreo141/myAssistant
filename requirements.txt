@@ -1,4 +1,5 @@
 openwakeword
 pyaudio
 numpy
-SpeechRecognition
+speech_recognition
+pickle

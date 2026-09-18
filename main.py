@@ -3,6 +3,7 @@ import pyaudio
 import numpy as np
 import openwakeword
 import speech_recognition as sr
+import pickle
 from openwakeword.model import Model
 
 # ---------------- CONFIG
@@ -16,7 +17,7 @@ wakePhrase = config["Main"]["wakephrase"]
 
 openwakeword.utils.download_models()
 
-model = Model(
+wake_model = Model(
     wakeword_models=[wakePhrase],
     vad_threshold=0.5
 )
@@ -86,7 +87,12 @@ def speech_to_text():
 # ---------------- MAIN LOOP ----------------
 
 if __name__ == "__main__":
+    with open("intentClassificationModel/models/intent_model.pkl", "rb") as f:
+        intent_model = pickle.load(f)
 
+    with open("intentClassificationModel/models/vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
+    
     try:
         print("\nListening for wake words...\n")
 
@@ -103,12 +109,12 @@ if __name__ == "__main__":
             )
 
             # Run wake-word detection
-            prediction = model.predict(audio_data)
+            wake_model.predict(audio_data)
 
             # Check wake word
-            for mdl in model.prediction_buffer.keys():
+            for mdl in wake_model.prediction_buffer.keys():
 
-                scores = list(model.prediction_buffer[mdl])
+                scores = list(wake_model.prediction_buffer[mdl])
                 score = scores[-1]
 
                 if score > 0.5:
@@ -120,19 +126,30 @@ if __name__ == "__main__":
 
                     if text:
                         print(f"Command: {text}")
-                        if text.lower() == "exit":
-                            exits()
-                        if "hello" in text.lower():
+
+                        X = vectorizer.transform([text])
+                        intent = intent_model.predict(X)[0]
+
+                        if intent == "greetings":
                             print("Hello! How can I assist you?")
-                        if "hi" in text.lower():
-                            print("Hi there! What can I do for you?")
-                        if "capital of france" in text.lower():
-                            print("oui oui oui")
+
+                        if intent == "lock_computer":
+                            print("Locking the computer...")
+
+                        if intent == "shutdown_computer":
+                            print("Shutting down the computer...")
+
+                        if intent == "close_all_windows":
+                            print("Closing all windows...")
+
+                        if intent == "exit": 
+                            print("Exiting...") 
+                            exits()
 
 
                     print("\nListening for wake words...\n")
 
-                    model.prediction_buffer.clear()
+                    wake_model.prediction_buffer.clear()
 
                     break
 

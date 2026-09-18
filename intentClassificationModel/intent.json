@@ -1,0 +1,60 @@
+{
+    "intents": [
+        {
+            "name": "greetings",
+            "examples": [
+                "hello",
+                "hi",
+                "hey",
+                "good morning",
+                "good afternoon",
+                "good evening"
+            ]
+        },
+        {
+            "name": "exit",
+            "examples": [
+                "exit",
+                "quit",
+                "go to sleep",
+                "goodnight",
+                "bye",
+                "goodbye",
+                "shut down the assistant",
+                "close yourself",
+                "stop listening",
+                "you can stop now"
+            ]
+        },
+        {
+            "name": "lock_computer",
+            "examples": [
+                "lock my computer",
+                "lock the computer",
+                "lock the screen",
+                "lock my screen",
+                "lock the device"
+            ]
+        },
+        {
+            "name": "shutdown_computer",
+            "examples": [
+                "shutdown my computer",
+                "turn off the computer",
+                "shut down the device",
+                "power off the computer",
+                "shut down the system"
+            ]
+        },
+        {
+            "name": "close_all_windows",
+            "examples": [
+                "close all windows",
+                "close all applications",
+                "close all programs",
+                "exit all windows",
+                "close everything"
+            ]
+        }
+    ]
+}
