@@ -2,23 +2,26 @@ import configparser
 import pyaudio
 import numpy as np
 import openwakeword
+import speech_recognition as sr
 from openwakeword.model import Model
+
+# ---------------- CONFIG
 
 config = configparser.ConfigParser()
 config.read("config.ini")
 
-# --------------/ Config Variables
 wakePhrase = config["Main"]["wakephrase"]
-# ---/
+
+# ---------------- WAKE WORD
 
 openwakeword.utils.download_models()
 
 model = Model(
-    wakeword_models=["hey_jarvis"],
+    wakeword_models=[wakePhrase],
     vad_threshold=0.5
 )
 
-n_models = len(model.models.keys())
+# ---------------- AUDIO
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
@@ -26,35 +29,116 @@ CHANNELS = 1
 RATE = 16000
 
 audio = pyaudio.PyAudio()
-mic_stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
+
+mic_stream = audio.open(
+    format=FORMAT,
+    channels=CHANNELS,
+    rate=RATE,
+    input=True,
+    frames_per_buffer=CHUNK
+)
+
+recognizer = sr.Recognizer()
+
+def exits():
+    print("Exiting...")
+    mic_stream.stop_stream()
+    mic_stream.close()
+    audio.terminate()
+    exit(0)
+
+# ---------------- SPEECH TO TEXT
+
+def speech_to_text():
+    print("\nListening for your command...")
+
+    frames = []
+
+    for _ in range(int(RATE / CHUNK * 5)):
+        data = mic_stream.read(CHUNK, exception_on_overflow=False)
+        frames.append(data)
+
+    # Convert recorded data into SpeechRecognition AudioData
+    raw_audio = b"".join(frames)
+
+    audio_data = sr.AudioData(
+        raw_audio,
+        RATE,
+        2
+    )
+
+    print("Processing transcription...")
+
+    try:
+        text = recognizer.recognize_google(audio_data)
+        print(f"You said: {text}")
+        return text
+
+    except sr.UnknownValueError:
+        print("Could not understand the audio.")
+
+    except sr.RequestError as e:
+        print(f"Google Speech Recognition error: {e}")
+
+    return None
 
 
-try:
-    print("\n\n")
-    print("Listening for wake words")
-    while True:
-        audio = np.frombuffer(mic_stream.read(CHUNK), dtype=np.int16)
+# ---------------- MAIN LOOP ----------------
 
-        prediction = model.predict(audio)
+if __name__ == "__main__":
 
-                # Column titles
-        n_spaces = 16
-        output_string_header = """
-            Model Name         | Score | Wakeword Status
-            --------------------------------------
-            """
+    try:
+        print("\nListening for wake words...\n")
 
-        for mdl in model.prediction_buffer.keys():
-            # Add scores in formatted table
-            scores = list(model.prediction_buffer[mdl])
-            curr_score = format(scores[-1], '.20f').replace("-", "")
+        while True:
+            # Read microphone
+            data = mic_stream.read(
+                CHUNK,
+                exception_on_overflow=False
+            )
 
-            output_string_header += f"""{mdl}{" "*(n_spaces - len(mdl))}   | {curr_score[0:5]} | {"--"+" "*20 if scores[-1] <= 0.5 else "Wakeword Detected!"}
-            """
+            audio_data = np.frombuffer(
+                data,
+                dtype=np.int16
+            )
 
-        # Print results table
-        print("\033[F"*(4*n_models+1))
-        print(output_string_header, "                             ", end='\r')
+            # Run wake-word detection
+            prediction = model.predict(audio_data)
 
-except KeyboardInterrupt:
-    print()
+            # Check wake word
+            for mdl in model.prediction_buffer.keys():
+
+                scores = list(model.prediction_buffer[mdl])
+                score = scores[-1]
+
+                if score > 0.5:
+
+                    print(f"\nWakeword detected! Score: {score:.3f}")
+
+                    # Capture speech
+                    text = speech_to_text()
+
+                    if text:
+                        print(f"Command: {text}")
+                        if text.lower() == "exit":
+                            exits()
+                        if "hello" in text.lower():
+                            print("Hello! How can I assist you?")
+                        if "hi" in text.lower():
+                            print("Hi there! What can I do for you?")
+                        if "capital of france" in text.lower():
+                            print("oui oui oui")
+
+
+                    print("\nListening for wake words...\n")
+
+                    model.prediction_buffer.clear()
+
+                    break
+
+    except KeyboardInterrupt:
+
+        print("\nStopping...")
+
+        exits()
+
