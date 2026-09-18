@@ -1,8 +1,12 @@
+import os
 import configparser
 import pyaudio
 import numpy as np
 import openwakeword
 import speech_recognition as sr
+from gtts import gTTS
+import pygame
+import io
 import pickle
 from openwakeword.model import Model
 
@@ -48,6 +52,7 @@ def exits():
     audio.terminate()
     exit(0)
 
+
 # ---------------- SPEECH TO TEXT
 
 def speech_to_text():
@@ -84,7 +89,30 @@ def speech_to_text():
     return None
 
 
-# ---------------- MAIN LOOP ----------------
+# ---------------- TEXT TO SPEECH
+
+def text_to_speech(text):
+    tts = gTTS(text=text, lang='en')
+    audio_stream = io.BytesIO()
+
+    # 3. Write the MP3 to stream
+    tts.write_to_fp(audio_stream)
+
+    # 4. Rewind the stream begin
+    audio_stream.seek(0)
+
+    # 5. Init mixer
+    pygame.mixer.init()
+
+    # 6. Load audio and play
+    pygame.mixer.music.load(audio_stream)
+    pygame.mixer.music.play()
+
+    while pygame.mixer.music.get_busy():
+        pygame.time.wait(100)
+
+
+# ---------------- MAIN LOOP
 
 if __name__ == "__main__":
     with open("intentClassificationModel/models/intent_model.pkl", "rb") as f:
@@ -118,8 +146,9 @@ if __name__ == "__main__":
                 score = scores[-1]
 
                 if score > 0.5:
-
                     print(f"\nWakeword detected! Score: {score:.3f}")
+
+                    text_to_speech("Yes?")
 
                     # Capture speech
                     text = speech_to_text()
@@ -131,21 +160,26 @@ if __name__ == "__main__":
                         intent = intent_model.predict(X)[0]
 
                         if intent == "greetings":
-                            print("Hello! How can I assist you?")
+                            text_to_speech("Hello! How can I assist you?")
 
                         if intent == "lock_computer":
-                            print("Locking the computer...")
+                            text_to_speech("Locking the computer...")
 
                         if intent == "shutdown_computer":
-                            print("Shutting down the computer...")
+                            text_to_speech("Shutting down the computer...")
 
                         if intent == "close_all_windows":
-                            print("Closing all windows...")
+                            text_to_speech("Closing all windows...")
 
                         if intent == "exit": 
-                            print("Exiting...") 
-                            exits()
+                            text_to_speech("Are you sure you want to exit?")
+                            response = speech_to_text()
 
+                            if response and "yes" in response.lower():
+                                text_to_speech("Exiting...")
+                                exits()
+
+                            text_to_speech("Okay!")
 
                     print("\nListening for wake words...\n")
 
@@ -154,8 +188,6 @@ if __name__ == "__main__":
                     break
 
     except KeyboardInterrupt:
-
         print("\nStopping...")
-
         exits()
 

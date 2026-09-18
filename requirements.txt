@@ -1,5 +1,6 @@
 openwakeword
 pyaudio
 numpy
-speech_recognition
-pickle
+SpeechRecognition
+gtts
+pygame
