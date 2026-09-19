@@ -26,7 +26,7 @@ class FloatingWindow(QWidget):
         
         # Add your text
         self.label = QLabel("How may I help you?", self)
-        self.label.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        self.label.setFont(QFont("Segoe UI", 12, QFont.Bold))
         self.label.setStyleSheet("color: #00ffcc;")
         self.label.move(20, 20)
         self.response_received.connect(self._update_response)

@@ -18,6 +18,7 @@ from openwakeword.model import Model
 from myGUI import FloatingWindow
 from google import genai
 from dotenv import load_dotenv
+from text_to_speech import TextToSpeechGenerator
 
 load_dotenv()
 my_api_key = os.getenv("GEMINI_API_KEY")
@@ -38,6 +39,7 @@ config.read("config.ini")
 wakePhrase = config["Main"]["wakephrase"]
 system_prompt = config["Main"]["system_prompt"]
 gemini_model = config["Main"]["gemini_model"]
+use_gemini_tts = config.getboolean("Main", "gemini_tts", fallback=False)
 
 # ---------------- WAKE WORD
 
@@ -156,14 +158,20 @@ def text_to_speech(text):
     if response_window is not None:
         response_window.set_response(text)
 
-    tts = gTTS(text=text, lang='en')
-    audio_stream = io.BytesIO()
-
-    # 3. Write the MP3 to stream
-    tts.write_to_fp(audio_stream)
-
-    # 4. Rewind the stream begin
-    audio_stream.seek(0)
+    if use_gemini_tts:
+        try:
+            audio_data = TextToSpeechGenerator.generate(text)
+            audio_stream = io.BytesIO(audio_data)
+        except Exception as error:
+            print(f"[ERROR] Gemini TTS failed, using Google TTS: {error}")
+            audio_stream = io.BytesIO()
+            gTTS(text=text, lang="en").write_to_fp(audio_stream)
+            audio_stream.seek(0)
+    else:
+        tts = gTTS(text=text, lang="en")
+        audio_stream = io.BytesIO()
+        tts.write_to_fp(audio_stream)
+        audio_stream.seek(0)
 
     # 5. Init mixer
     pygame.mixer.init()
@@ -238,13 +246,13 @@ def run_assistant():
                     
                     if command:
                         print(f"Command: {command}")
-    
+
                         response_window.set_visible(True)
                         text_to_speech("Thinking...")
 
                         try:
                             interaction = client.interactions.create(
-                                model="gemini-3.5-flash-lite",
+                                model=gemini_model,
                                 input=command,
                                 system_instruction=system_prompt
                             )
