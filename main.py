@@ -238,8 +238,9 @@ def run_assistant():
                 if mdl == "hey_jarvis" and score > 0.5:
                     print(f"\n(Jarvis) Wakeword detected! Score: {score:.3f}")
 
+                    response_window.trigger_wave()
                     response_window.set_visible(True)
-                    text_to_speech("This is jarvis. What's up?")
+                    text_to_speech("Hey!")
                     response_window.set_visible(False)
 
                     command = speech_to_text()
@@ -280,6 +281,7 @@ def run_assistant():
                 elif mdl == wakePhrase and score > 0.5:
                     print(f"\nWakeword detected! Score: {score:.3f}")
 
+                    response_window.trigger_wave()
                     response_window.set_visible(True)
                     text_to_speech("What's up?")
                     response_window.set_visible(False)
