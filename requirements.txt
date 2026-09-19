@@ -4,3 +4,8 @@ numpy
 SpeechRecognition
 gtts
 pygame
+pywin32
+PyQt5
+pyttsx3
+google-genai
+python-dotenv
