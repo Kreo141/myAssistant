@@ -1,11 +1,12 @@
 # myAssistant
 
-`myAssistant` is a Windows desktop voice assistant that listens for a wake word, transcribes a short spoken command, and routes it to either a small local intent model or Gemini. It uses a transparent PyQt overlay to show responses and a glowing wave when the assistant wakes up.
+`myAssistant` is a Windows desktop voice assistant that listens for a wake word, transcribes a short spoken command, and routes it to either a small local intent model or Gemini. It can also capture the current desktop screen and send it to Gemini for visual analysis. A transparent PyQt overlay shows responses, wake activity, and a continuous scanning animation while screen analysis is in progress.
 
 The project is intentionally split between two kinds of work:
 
 - **Local actions:** greetings, locking the computer, closing windows, and exiting the assistant.
 - **Gemini conversations:** questions and requests that are not handled by the local intent classifier.
+- **Screen vision:** spoken `hey_jarvis` requests classified as `analyze_screen` capture the desktop and ask Gemini to interpret it.
 
 ## What It Uses
 
@@ -13,6 +14,7 @@ The project is intentionally split between two kinds of work:
 - SpeechRecognition with Google Speech Recognition for transcription
 - A TF-IDF + Logistic Regression model for local command classification
 - Gemini through the `google-genai` client for general questions
+- PyAutoGUI for desktop screenshots used by the vision assistant
 - Google TTS by default, with optional Gemini TTS support
 - PyQt5 for the fullscreen transparent overlay
 - PyAudio and NumPy for microphone input and energy-based speech detection
@@ -23,6 +25,7 @@ This project currently targets **Windows**. It uses `pywin32` for window managem
 
 - Python 3.10 or newer
 - A working microphone
+- A display that can be captured by PyAutoGUI
 - Internet access for OpenWakeWord model downloads, speech recognition, Gemini, and Google TTS
 - A Gemini API key if Gemini responses are enabled
 
@@ -76,7 +79,24 @@ Start the assistant from the project directory:
 python main.py
 ```
 
-The microphone listener runs in a background thread while the PyQt event loop owns the overlay. Speak the configured wake phrase, wait for the acknowledgement, and then give a command.
+The microphone listener runs in a background thread while the PyQt event loop owns the overlay. Speak the configured wake phrase, wait for the acknowledgement, and then give a command. The `hey_jarvis` wake word supports general Gemini requests and screen-analysis requests.
+
+### Screen Analysis
+
+Ask the assistant to analyze the current screen using the `hey_jarvis` wake word, for example:
+
+```text
+Hey Jarvis, analyze my screen
+```
+
+When the request is classified as `analyze_screen`, the assistant:
+
+1. Captures the current desktop with PyAutoGUI.
+2. Sends the screenshot and spoken prompt to the configured Gemini model.
+3. Displays the continuous scan animation while Gemini is processing.
+4. Stops the animation and reads the visual response aloud.
+
+The scan animation is controlled by the response window through `trigger_scan(True)` and `trigger_scan(False)`. It is independent of the screen-capture and Gemini request logic.
 
 ## Configuration
 
@@ -86,25 +106,28 @@ Settings live in `config.ini`:
 | --- | --- |
 | `wakephrase` | Configured OpenWakeWord model, `alexa` by default |
 | `sensitivity` | Documented configuration value for wake-word sensitivity |
-| `system_prompt` | Controls Gemini response style; the default asks for very brief plain-text answers |
+| `general_system_prompt` | Controls Gemini response style; the default asks for very brief plain-text answers |
+| `vision_system_prompt` | Controls the response format for screen-analysis requests |
 | `gemini_model` | Gemini model passed to the API client |
 | `gemini_tts` | Set to `true` to use the project Gemini TTS path instead of Google TTS |
 
-The code also loads `hey_jarvis` as a second wake-word model. The configured phrase and `hey_jarvis` currently use different response paths: the configured phrase uses the local intent model, while `hey_jarvis` sends the spoken command to Gemini.
+The code also loads `hey_jarvis` as a second wake-word model. The configured phrase uses the local intent model, while `hey_jarvis` sends the spoken command to the Gemini task classifier. That classifier routes requests to either general chat or screen analysis.
 
 ## Safety Notes
 
 - The assistant asks for spoken confirmation before shutdown and exit actions.
 - The operating-system shutdown command is currently commented out in `main.py`, so recognizing `shutdown_computer` does not power off the machine yet.
 - `close_all_windows` posts close messages to visible top-level windows. Use it carefully.
+- Screen analysis captures the current desktop and sends the screenshot to Gemini. Do not use it while private or sensitive information is visible unless you are comfortable sharing that image with the configured Gemini service.
 - The overlay is transparent for input and does not provide a clickable control surface. Stop the process with `Ctrl+C` when needed.
 
 ## Project Layout
 
 ```text
 main.py                              Audio loop, routing, and assistant lifecycle
-myGUI.py                             Transparent response overlay and wake animation
+myGUI.py                             Transparent response overlay, wake wave, and scan animation
 text_to_speech.py                    Optional Gemini TTS helper
+pyautogui                             Desktop screenshot capture dependency
 config.ini                           Runtime configuration
 requirements.txt                     Python dependencies
 intentClassificationModel/
@@ -126,6 +149,10 @@ OpenWakeWord downloads its models on startup. Confirm the machine has internet a
 **Gemini is not available**
 
 Check that `.env` is in the same directory as `main.py`, the variable is named exactly `GEMINI_API_KEY`, and the key is valid.
+
+**Screen analysis does not work**
+
+Confirm that `pyautogui` is installed, the Gemini API key is valid, and the spoken request is routed to the `analyze_screen` intent. Screen capture permissions, remote desktop sessions, or protected application windows can also prevent the screenshot from containing the expected content.
 
 **The local model behaves unexpectedly**
 

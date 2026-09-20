@@ -49,6 +49,8 @@ class FloatingWindow(QWidget):
         self.scan_active = False
         self.scan_phase = 0.0
         self.scan_opacity = 0.0
+        self.response_text = "How may I help you?"
+        self.response_index = len(self.response_text)
 
         self.wave_timer = QTimer(self)
         self.wave_timer.setInterval(16)
@@ -57,6 +59,10 @@ class FloatingWindow(QWidget):
         self.scan_timer = QTimer(self)
         self.scan_timer.setInterval(16)
         self.scan_timer.timeout.connect(self._advance_scan)
+
+        self.response_timer = QTimer(self)
+        self.response_timer.setInterval(15)
+        self.response_timer.timeout.connect(self._advance_response)
 
         self.response_received.connect(self._update_response)
         self.visibility_changed.connect(self._update_visibility)
@@ -122,10 +128,25 @@ class FloatingWindow(QWidget):
 
         self.update()
 
+    def _advance_response(self):
+        if self.response_index >= len(self.response_text):
+            self.response_timer.stop()
+            return
+
+        self.response_index += 1
+        self.label.setText(self.response_text[:self.response_index])
+        self.label.adjustSize()
+
     @pyqtSlot(str)
     def _update_response(self, response):
-        self.label.setText(response)
+        self.response_timer.stop()
+        self.response_text = response or ""
+        self.response_index = 0
+        self.label.setText("")
         self.label.adjustSize()
+
+        if self.response_text:
+            self.response_timer.start()
 
     @pyqtSlot(bool)
     def _update_visibility(self, visible):

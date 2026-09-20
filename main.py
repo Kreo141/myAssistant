@@ -2,6 +2,7 @@ import os
 import win32gui
 import win32con
 import configparser
+import json
 import pyaudio
 import numpy as np
 import openwakeword
@@ -41,8 +42,66 @@ config.read("config.ini")
 wakePhrase = config["Main"]["wakephrase"]
 general_system_prompt = config["Main"]["general_system_prompt"]
 gemini_model = config["Main"]["gemini_model"]
-vision_system_prompt = config["Main"]["vision_system_prompt"]
+# vision_system_prompt = config["Main"]["vision_system_prompt"]
 use_gemini_tts = config.getboolean("Main", "gemini_tts", fallback=False)
+
+vision_system_prompt = """
+You are the action-planning module of an AI assistant.
+
+Analyze the screenshot and user's request.
+
+Determine whether an internal action should be executed.
+
+AVAILABLE ACTIONS:
+
+
+add_calendar:
+Add an event to the user's calendar.
+
+Parameters:
+- title: string
+- date: YYYY-MM-DD
+- start_time: HH:MM
+- end_time: HH:MM or null
+- description: string or null
+
+describe_screen:
+Describe what is visible on the user's screen when they ask what is on or in their screen.
+
+Parameters:
+- response: string
+
+Return ONLY valid JSON:
+
+{
+    "action": "action_name",
+    "data": {}
+}
+
+Rules:
+- action must be one of the available actions
+- data must contain the parameters for that action
+- never invent missing information
+- use null when information cannot be determined
+- if no action is appropriate, use:
+  {"action": "none", "data": {}}
+
+STRICT OUTPUT RULES:
+- Return ONLY the raw JSON object.
+- DO NOT use Markdown.
+- DO NOT wrap the response in ```json.
+- DO NOT wrap the response in ``` or any other code fence.
+- DO NOT include explanations before or after the JSON.
+- DO NOT include comments inside the JSON.
+- The first character of your response MUST be `{`.
+- The last character of your response MUST be `}`.
+- "action" must be one of the available actions.
+- "data" must contain only the parameters defined for that action.
+- If information cannot be determined from the screenshot, use null instead of guessing.
+- If no action should be performed, return:
+  {"action": "none", "data": {}}
+- The response must be directly parseable using Python's json.loads().
+"""
 
 # ---------------- WAKE WORD
 
@@ -206,6 +265,14 @@ def close_window(hwnd, extra):
             win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
 
 
+# ---------------- GENERAL ACTION FUNCTION
+def general_action(parsed_data):
+    response_text = parsed_data["data"].get("response")
+    text_to_speech(response_text)
+
+
+
+
 # ---------------- GENERAL ASSISTANT FUNCTION
 
 
@@ -332,7 +399,14 @@ def run_assistant():
 
                             print("[LOG] Gemini Response:", response)
 
-                            text_to_speech(response)
+                            parsed_data = json.loads(response)
+
+                            if parsed_data.get("action") == "describe_screen":
+                                general_action(parsed_data)
+
+                            if parsed_data.get("action") == "add_calendar":
+                                # Implement: Add event to calendar
+                                print()
                         
 
                     # Hide UI after processing the command
