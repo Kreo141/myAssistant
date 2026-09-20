@@ -12,11 +12,13 @@ import io
 import pickle
 import ctypes
 import sys
+import pyautogui
 from threading import Event, Thread
 from PyQt5.QtWidgets import QApplication
 from openwakeword.model import Model
 from myGUI import FloatingWindow
 from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 from text_to_speech import TextToSpeechGenerator
 
@@ -37,8 +39,9 @@ config = configparser.ConfigParser()
 config.read("config.ini")
 
 wakePhrase = config["Main"]["wakephrase"]
-system_prompt = config["Main"]["system_prompt"]
+general_system_prompt = config["Main"]["general_system_prompt"]
 gemini_model = config["Main"]["gemini_model"]
+vision_system_prompt = config["Main"]["vision_system_prompt"]
 use_gemini_tts = config.getboolean("Main", "gemini_tts", fallback=False)
 
 # ---------------- WAKE WORD
@@ -203,14 +206,65 @@ def close_window(hwnd, extra):
             win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
 
 
+# ---------------- GENERAL ASSISTANT FUNCTION
+
+
+
+# ---------------- VISION ASSISSTANT FUNCTION
+def analyze_screen_with_gemini(prompt):
+    screenshot = pyautogui.screenshot()
+
+    image_buffer = io.BytesIO()
+
+    screenshot.save(image_buffer, format="JPEG")
+
+    image_bytes = image_buffer.getvalue()
+
+    model = gemini_model
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part.from_bytes(
+                    mime_type="image/png",
+                    data=image_bytes,
+                ),
+                types.Part.from_text(
+                    text=
+                    f"SYSTEM INSTRUCTION: {vision_system_prompt}\n USER PROMPT: {prompt}"),
+            ],
+        ),
+    ]
+
+    response_window.trigger_scan(True)
+
+    interaction = client.models.generate_content(
+        model=model,
+        contents=contents
+    )
+
+    print("[LOG]: " + str(interaction))
+    response_text = interaction.text if interaction.text else "No response from Gemini."
+
+    response_window.trigger_scan(False)
+    return response_text
+
+
+
 # ---------------- MAIN LOOP
 
 def run_assistant():
-    with open("intentClassificationModel/models/intent_model.pkl", "rb") as f:
+    with open("intentClassificationModel/models/intent_model_intent.pkl", "rb") as f:
         intent_model = pickle.load(f)
 
-    with open("intentClassificationModel/models/vectorizer.pkl", "rb") as f:
+    with open("intentClassificationModel/models/vectorizer_intent.pkl", "rb") as f:
         vectorizer = pickle.load(f)
+
+    with open("intentClassificationModel/models/intent_model_genai_task_intent.pkl", "rb") as f:
+        genai_task_intent_model = pickle.load(f)
+
+    with open("intentClassificationModel/models/vectorizer_genai_task_intent.pkl", "rb") as f:
+        genai_task_vectorizer = pickle.load(f)
     
     try:
         print("\nListening for wake words...\n")
@@ -246,27 +300,40 @@ def run_assistant():
                     command = speech_to_text()
                     
                     if command:
-                        print(f"Command: {command}")
+                        X = genai_task_vectorizer.transform([command])
+                        genai_intent = genai_task_intent_model.predict(X)[0]
 
-                        response_window.set_visible(True)
-                        text_to_speech("Thinking...")
+                        print(f"[{genai_intent}] Command: {command}")
 
-                        try:
-                            interaction = client.interactions.create(
-                                model=gemini_model,
-                                input=command,
-                                system_instruction=system_prompt
-                            )
-                            response_text = interaction.output_text
+                        
+                        if genai_intent == "general_chat": 
+                            try:
+                                response_window.set_visible(True)
+                                text_to_speech("Thinking...")
+                                interaction = client.interactions.create(
+                                    model=gemini_model,
+                                    input=command,
+                                    system_instruction=general_system_prompt
+                                )
+                                response_text = interaction.output_text
+    
+                                if not response_text:
+                                    raise RuntimeError("Gemini returned an empty response")
+    
+                                print("[LOG] Gemini Response:", response_text)
+                                text_to_speech(response_text)
+                            except Exception as error:
+                                print(f"[ERROR] Gemini request failed: {error}")
+                                text_to_speech("I could not get a response from Gemini.")
+                                
+                        elif genai_intent == "analyze_screen":
+                            # Implement: Analyze the screen content and provide insights
+                            response = analyze_screen_with_gemini(command)
 
-                            if not response_text:
-                                raise RuntimeError("Gemini returned an empty response")
+                            print("[LOG] Gemini Response:", response)
 
-                            print("[LOG] Gemini Response:", response_text)
-                            text_to_speech(response_text)
-                        except Exception as error:
-                            print(f"[ERROR] Gemini request failed: {error}")
-                            text_to_speech("I could not get a response from Gemini.")
+                            text_to_speech(response)
+                        
 
                     # Hide UI after processing the command
                     response_window.set_visible(False)
