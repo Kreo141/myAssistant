@@ -2,7 +2,8 @@ import numpy as np
 import sys
 from threading import Event, Thread
 from PyQt5.QtWidgets import QApplication
-from myGUI import FloatingWindow
+from ui.floating_window import FloatingWindow
+from ui.ui_controller import UIController
 from actions.calendar_actions import CalendarActions
 from actions.computer_actions import ComputerActions
 from actions.confirmation import ConfirmationService
@@ -120,19 +121,20 @@ microphone = Microphone(
 
 speech_to_text_service = SpeechToTextService()
 response_window = None
+ui_controller = None
 qt_app = None
 stop_event = Event()
 is_exiting = False
 
 
 def update_response_window(text):
-    if response_window is not None:
-        response_window.set_response(text)
+    if ui_controller is not None:
+        ui_controller.set_response(text)
 
 
 def update_scan_state(enabled):
-    if response_window is not None:
-        response_window.trigger_scan(enabled)
+    if ui_controller is not None:
+        ui_controller.show_scan(enabled)
 
 
 tts_service = TextToSpeechService(
@@ -161,8 +163,8 @@ def exits():
     stop_event.set()
     print("Exiting...")
 
-    if response_window is not None:
-        response_window.set_visible(False)
+    if ui_controller is not None:
+        ui_controller.hide()
 
     try:
         microphone.close()
@@ -235,10 +237,11 @@ def run_assistant():
                 if mdl == "hey_jarvis" and score > 0.5:
                     print(f"\n(Jarvis) Wakeword detected! Score: {score:.3f}")
 
-                    response_window.trigger_wave()
-                    response_window.set_visible(True)
+                    if ui_controller is not None:
+                        ui_controller.show_wake_indicator()
                     text_to_speech("Hey!")
-                    response_window.set_visible(False)
+                    if ui_controller is not None:
+                        ui_controller.hide()
 
                     command = speech_to_text()
                     
@@ -250,7 +253,8 @@ def run_assistant():
                         
                         if genai_intent == "general_chat": 
                             try:
-                                response_window.set_visible(True)
+                                if ui_controller is not None:
+                                    ui_controller.show()
                                 text_to_speech("Thinking...")
                                 response_text = gemini_client.generate_chat(
                                     model=gemini_model,
@@ -282,7 +286,8 @@ def run_assistant():
                         
 
                     # Hide UI after processing the command
-                    response_window.set_visible(False)
+                    if ui_controller is not None:
+                        ui_controller.hide()
 
                     print("\nListening for wake words...\n")
 
@@ -294,10 +299,11 @@ def run_assistant():
                 elif mdl == wakePhrase and score > 0.5:
                     print(f"\nWakeword detected! Score: {score:.3f}")
 
-                    response_window.trigger_wave()
-                    response_window.set_visible(True)
+                    if ui_controller is not None:
+                        ui_controller.show_wake_indicator()
                     text_to_speech("What's up?")
-                    response_window.set_visible(False)
+                    if ui_controller is not None:
+                        ui_controller.hide()
 
                     text = speech_to_text()
 
@@ -311,7 +317,8 @@ def run_assistant():
                             return
 
                     # Hide UI after processing the command
-                    response_window.set_visible(False)
+                    if ui_controller is not None:
+                        ui_controller.hide()
 
                     print("\nListening for wake words...\n")
 
@@ -328,7 +335,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     qt_app = app
     response_window = FloatingWindow()
-    response_window.show()
+    ui_controller = UIController(response_window)
+    ui_controller.show()
 
     assistant_thread = Thread(target=run_assistant, daemon=True)
     assistant_thread.start()
