@@ -1,11 +1,12 @@
-import win32gui
-import win32con
 import numpy as np
-import ctypes
 import sys
 from threading import Event, Thread
 from PyQt5.QtWidgets import QApplication
 from myGUI import FloatingWindow
+from actions.calendar_actions import CalendarActions
+from actions.computer_actions import ComputerActions
+from actions.confirmation import ConfirmationService
+from actions.registry import create_default_registry
 from ai.gemini_client import GeminiClient
 from ai.intent_classifier import IntentClassifier
 from ai.response_parser import ResponseParser
@@ -16,6 +17,7 @@ from audio.text_to_speech import TextToSpeechService
 from audio.wake_word import WakeWordDetector
 from config.settings import Settings
 from core.exceptions import AIServiceError
+from core.models import ActionRequest
 from utils.logging import configure_logging
 from utils.audio_utils import pcm_to_audio_data
 from utils.paths import ProjectPaths
@@ -192,25 +194,6 @@ def text_to_speech(text):
     tts_service.speak(text)
 
 
-# ---------------- CONFIRM ACTION
-def confirm_action(prompt="Are you sure you want to do this?"):
-    text_to_speech(prompt)
-    response = speech_to_text()
-
-    if response and "yes" in response.lower():
-        return True
-
-    return False
-
-
-# ---------------- CLOSE WINDOW
-def close_window(hwnd, extra):
-    if win32gui.IsWindowVisible(hwnd):
-        title = win32gui.GetWindowText(hwnd)
-        if title and title not in ["Program Manager", "Settings"]:
-            win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
-
-
 # ---------------- GENERAL ACTION FUNCTION
 def general_action(parsed_data):
     response_text = parsed_data.data.get("response")
@@ -223,6 +206,13 @@ def general_action(parsed_data):
 
 def run_assistant():
     intent_classifier = IntentClassifier(paths.intent_model_dir)
+    action_registry = create_default_registry(
+        computer_actions=ComputerActions(),
+        calendar_actions=CalendarActions(),
+        confirmation_service=ConfirmationService(text_to_speech, speech_to_text),
+        speak=text_to_speech,
+        on_exit=exits,
+    )
     
     try:
         print("\nListening for wake words...\n")
@@ -283,8 +273,9 @@ def run_assistant():
                                     general_action(action_request)
 
                                 if action_request.name == "add_calendar":
-                                    # Implement: Add event to calendar
-                                    print()
+                                    result = action_registry.dispatch(action_request)
+                                    if result.message:
+                                        text_to_speech(result.message)
                             except AIServiceError as error:
                                 print(f"[ERROR] Vision request failed: {error}")
                                 text_to_speech("I could not analyze the screen.")
@@ -315,30 +306,9 @@ def run_assistant():
 
                         intent = intent_classifier.classify_local(text)
 
-                        if intent == "greetings":
-                            text_to_speech("Hello! How can I assist you?")
-                            response_window.set_visible(True)
-
-                        if intent == "lock_computer":
-                            text_to_speech("Locking the computer...")
-                            ctypes.windll.user32.LockWorkStation()
-
-                        if intent == "shutdown_computer":
-                            if confirm_action("Are you sure you want to do this?"):
-                                text_to_speech("Shutting down...")
-                                # os.system("shutdown /s /t 1")
-
-                        if intent == "close_all_windows":
-                            # Iterate through all top-level windows
-                            win32gui.EnumWindows(close_window, None)
-
-                        if intent == "exit": 
-                            if confirm_action("Are you sure you want to exit?"):
-                                text_to_speech("Exiting...")
-                                exits()
-                                return
-
-                            text_to_speech("Okay!")
+                        result = action_registry.dispatch(ActionRequest(name=intent))
+                        if result.data.get("exit"):
+                            return
 
                     # Hide UI after processing the command
                     response_window.set_visible(False)

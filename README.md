@@ -130,7 +130,7 @@ core/                                Shared data contracts, states, and exceptio
 utils/                               Project paths and logging helpers
 audio/                               Audio input and speech service boundary
 ai/                                  Gemini, classifier, and vision service boundary
-actions/                             Planned local action boundary
+actions/                             Local actions, confirmation, and dispatch boundary
 storage/                             JSON repository and SQLite database boundary
 ui/                                  Planned UI boundary
 orchestration/                       Planned assistant coordination boundary
@@ -145,9 +145,11 @@ intentClassificationModel/
     models/                             Serialized classifier and vectorizer
 ```
 
-The modular directories are being introduced incrementally. Phases 1 through 5 currently provide the `config`, `core`, `utils`, `audio`, `ai`, and `storage` foundations; local actions, UI extraction, and orchestration remain in later phases.
+The modular directories are being introduced incrementally. Phases 1 through 6 currently provide the `config`, `core`, `utils`, `audio`, `ai`, `storage`, and `actions` foundations; UI extraction and orchestration remain in later phases.
 
 `chat_history.json` remains the active storage format for now. The `storage/database.py` SQLite boundary and `assistant.db` path are prepared for a later migration, but the assistant does not create or use the database yet.
+
+Local computer operations are dispatched through `actions/registry.py`. Destructive operations require explicit spoken confirmation, and shutdown remains disabled until an explicit shutdown command is configured.
 
 ## Troubleshooting
 
