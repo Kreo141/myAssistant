@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from threading import Event
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -19,7 +19,11 @@ class Assistant:
         router: Any,
         tts_service: Any,
         ui_controller: Any,
-        settings: Any,
+        max_command_seconds: float = 5.0,
+        speech_energy_threshold: float = 500,
+        silence_after_seconds: float = 1.0,
+        sample_rate: int = 16000,
+        pcm_converter: Callable[[Any, int, int], Any] | None = None,
         stop_event: Event | None = None,
     ) -> None:
         self.wake_detector = wake_detector
@@ -28,7 +32,11 @@ class Assistant:
         self.router = router
         self.tts_service = tts_service
         self.ui_controller = ui_controller
-        self.settings = settings
+        self.max_command_seconds = max_command_seconds
+        self.speech_energy_threshold = speech_energy_threshold
+        self.silence_after_seconds = silence_after_seconds
+        self.sample_rate = sample_rate
+        self.pcm_converter = pcm_converter
         self.stop_event = stop_event or Event()
         self.state = AssistantState.IDLE
 
@@ -69,15 +77,15 @@ class Assistant:
     def _capture_command(self) -> str:
         self.state = AssistantState.LISTENING
         raw_audio = self.microphone.record_command(
-            max_seconds=self.settings.max_command_seconds,
-            energy_threshold=self.settings.speech_energy_threshold,
-            silence_after_seconds=self.settings.silence_after_speech_seconds,
+            max_seconds=self.max_command_seconds,
+            energy_threshold=self.speech_energy_threshold,
+            silence_after_seconds=self.silence_after_seconds,
         )
-        audio_data = self._to_audio_data(raw_audio)
+        if self.pcm_converter is not None:
+            audio_data = self.pcm_converter(raw_audio, self.sample_rate, 2)
+        else:
+            audio_data = raw_audio
         return self.speech_to_text_service.transcribe(audio_data)
-
-    def _to_audio_data(self, raw_audio):
-        return raw_audio
 
     def _process_command(self, command: str, wake_word: str):
         if wake_word == "hey_jarvis":
@@ -104,7 +112,6 @@ class Assistant:
                     self.ui_controller.show_scan(False)
                 return None
 
-        intent = self.router.intent_classifier.classify_local(command)
         result = self.router.route_local_action(command)
         if result.data.get("exit"):
             self.state = AssistantState.STOPPING

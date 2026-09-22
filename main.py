@@ -15,31 +15,58 @@ from ai.vision_analyzer import VisionAnalyzer
 from audio.microphone import Microphone
 from audio.speech_to_text import SpeechToTextService
 from audio.text_to_speech import TextToSpeechService
-from audio.wake_word import WakeWordDetector
 from config.settings import Settings
 from core.exceptions import AIServiceError
 from core.models import ActionRequest
+from orchestration.assistant import Assistant
+from orchestration.command_router import CommandRouter
 from utils.logging import configure_logging
 from utils.audio_utils import pcm_to_audio_data
 from utils.paths import ProjectPaths
 
 configure_logging()
 paths = ProjectPaths.discover()
-settings = Settings.load(paths)
-my_api_key = settings.require_gemini_api_key()
+settings = None
+my_api_key = None
 
-gemini_client = GeminiClient(api_key=my_api_key)
-print("Gemini Client connected successfully!")
+gemini_client = None
+wakePhrase = None
+general_system_prompt = None
+gemini_model = None
+use_gemini_tts = None
+vision_system_prompt = None
+wake_detector = None
+CHUNK = 1024
+CHANNELS = 1
+RATE = 16000
+SPEECH_ENERGY_THRESHOLD = 500
+SILENCE_AFTER_SPEECH_SECONDS = 1.0
+MAX_COMMAND_SECONDS = 5.0
+microphone = None
+speech_to_text_service = None
+response_window = None
+ui_controller = None
+qt_app = None
+stop_event = Event()
+is_exiting = False
 
-# ---------------- CONFIG
 
-wakePhrase = settings.wake_phrase
-general_system_prompt = settings.general_system_prompt
-gemini_model = settings.gemini_model
-# vision_system_prompt = config["Main"]["vision_system_prompt"]
-use_gemini_tts = settings.gemini_tts
+def build_runtime():
+    global settings, my_api_key, gemini_client, wakePhrase, general_system_prompt
+    global gemini_model, use_gemini_tts, vision_system_prompt, wake_detector
+    global microphone, speech_to_text_service, tts_service, vision_analyzer
 
-vision_system_prompt = """
+    settings = Settings.load(paths)
+    my_api_key = settings.require_gemini_api_key()
+    gemini_client = GeminiClient(api_key=my_api_key)
+    print("Gemini Client connected successfully!")
+
+    wakePhrase = settings.wake_phrase
+    general_system_prompt = settings.general_system_prompt
+    gemini_model = settings.gemini_model
+    use_gemini_tts = settings.gemini_tts
+
+    vision_system_prompt = """
 You are the action-planning module of an AI assistant.
 
 Analyze the screenshot and user's request.
@@ -97,34 +124,49 @@ STRICT OUTPUT RULES:
 - The response must be directly parseable using Python's json.loads().
 """
 
-# ---------------- WAKE WORD
+    wake_detector = WakeWordDetector(
+        wake_words=[wakePhrase, "hey_jarvis"],
+        vad_threshold=0.5,
+    )
 
-wake_detector = WakeWordDetector(
-    wake_words=[wakePhrase, "hey_jarvis"],
-    vad_threshold=0.5,
-)
+    microphone = Microphone(
+        chunk_size=CHUNK,
+        channels=CHANNELS,
+        sample_rate=RATE,
+    )
+    speech_to_text_service = SpeechToTextService()
 
-# ---------------- AUDIO
+    def update_response_window(text):
+        if ui_controller is not None:
+            ui_controller.set_response(text)
 
-CHUNK = 1024
-CHANNELS = 1
-RATE = 16000
-SPEECH_ENERGY_THRESHOLD = 500
-SILENCE_AFTER_SPEECH_SECONDS = 1.0
-MAX_COMMAND_SECONDS = 5.0
+    def update_scan_state(enabled):
+        if ui_controller is not None:
+            ui_controller.show_scan(enabled)
 
-microphone = Microphone(
-    chunk_size=CHUNK,
-    channels=CHANNELS,
-    sample_rate=RATE,
-)
+    tts_service = TextToSpeechService(
+        use_gemini=use_gemini_tts,
+        gemini_api_key=my_api_key,
+        response_callback=update_response_window,
+    )
 
-speech_to_text_service = SpeechToTextService()
-response_window = None
-ui_controller = None
-qt_app = None
-stop_event = Event()
-is_exiting = False
+    vision_analyzer = VisionAnalyzer(
+        gemini_client=gemini_client,
+        response_parser=ResponseParser(),
+        model=gemini_model,
+        system_instruction=vision_system_prompt,
+        scan_callback=update_scan_state,
+    )
+
+    return {
+        "settings": settings,
+        "gemini_client": gemini_client,
+        "wake_detector": wake_detector,
+        "microphone": microphone,
+        "speech_to_text_service": speech_to_text_service,
+        "tts_service": tts_service,
+        "vision_analyzer": vision_analyzer,
+    }
 
 
 def update_response_window(text):
@@ -135,21 +177,6 @@ def update_response_window(text):
 def update_scan_state(enabled):
     if ui_controller is not None:
         ui_controller.show_scan(enabled)
-
-
-tts_service = TextToSpeechService(
-    use_gemini=use_gemini_tts,
-    gemini_api_key=my_api_key,
-    response_callback=update_response_window,
-)
-
-vision_analyzer = VisionAnalyzer(
-    gemini_client=gemini_client,
-    response_parser=ResponseParser(),
-    model=gemini_model,
-    system_instruction=vision_system_prompt,
-    scan_callback=update_scan_state,
-)
 
 #---------------- EXIT FUNCTION
 
@@ -215,131 +242,53 @@ def run_assistant():
         speak=text_to_speech,
         on_exit=exits,
     )
-    
+    command_router = CommandRouter(
+        registry=action_registry,
+        intent_classifier=intent_classifier,
+        gemini_client=gemini_client,
+        vision_analyzer=vision_analyzer,
+        model=gemini_model,
+        system_instruction=general_system_prompt,
+    )
+    assistant = Assistant(
+        wake_detector=wake_detector,
+        microphone=microphone,
+        speech_to_text_service=speech_to_text_service,
+        router=command_router,
+        tts_service=tts_service,
+        ui_controller=ui_controller,
+        max_command_seconds=MAX_COMMAND_SECONDS,
+        speech_energy_threshold=SPEECH_ENERGY_THRESHOLD,
+        silence_after_seconds=SILENCE_AFTER_SPEECH_SECONDS,
+        sample_rate=RATE,
+        pcm_converter=pcm_to_audio_data,
+        stop_event=stop_event,
+    )
+
     try:
         print("\nListening for wake words...\n")
-
-        while not stop_event.is_set():
-            # Read microphone
-            data = microphone.read_chunk()
-
-            audio_data = np.frombuffer(
-                data,
-                dtype=np.int16
-            )
-
-            # Run wake-word detection
-            wake_scores = wake_detector.predict(audio_data)
-
-            # Check wake word
-            for mdl, score in wake_scores.items():
-
-                if mdl == "hey_jarvis" and score > 0.5:
-                    print(f"\n(Jarvis) Wakeword detected! Score: {score:.3f}")
-
-                    if ui_controller is not None:
-                        ui_controller.show_wake_indicator()
-                    text_to_speech("Hey!")
-                    if ui_controller is not None:
-                        ui_controller.hide()
-
-                    command = speech_to_text()
-                    
-                    if command:
-                        genai_intent = intent_classifier.classify_gemini_task(command)
-
-                        print(f"[{genai_intent}] Command: {command}")
-
-                        
-                        if genai_intent == "general_chat": 
-                            try:
-                                if ui_controller is not None:
-                                    ui_controller.show()
-                                text_to_speech("Thinking...")
-                                response_text = gemini_client.generate_chat(
-                                    model=gemini_model,
-                                    prompt=command,
-                                    system_instruction=general_system_prompt,
-                                )
-
-                                print("[LOG] Gemini Response:", response_text)
-                                text_to_speech(response_text)
-                            except Exception as error:
-                                print(f"[ERROR] Gemini request failed: {error}")
-                                text_to_speech("I could not get a response from Gemini.")
-                                
-                        elif genai_intent == "analyze_screen":
-                            try:
-                                action_request = vision_analyzer.analyze(command)
-                                print("[LOG] Gemini action:", action_request)
-
-                                if action_request.name == "describe_screen":
-                                    general_action(action_request)
-
-                                if action_request.name == "add_calendar":
-                                    result = action_registry.dispatch(action_request)
-                                    if result.message:
-                                        text_to_speech(result.message)
-                            except AIServiceError as error:
-                                print(f"[ERROR] Vision request failed: {error}")
-                                text_to_speech("I could not analyze the screen.")
-                        
-
-                    # Hide UI after processing the command
-                    if ui_controller is not None:
-                        ui_controller.hide()
-
-                    print("\nListening for wake words...\n")
-
-                    wake_detector.reset()
-
-                    break
-
-
-                elif mdl == wakePhrase and score > 0.5:
-                    print(f"\nWakeword detected! Score: {score:.3f}")
-
-                    if ui_controller is not None:
-                        ui_controller.show_wake_indicator()
-                    text_to_speech("What's up?")
-                    if ui_controller is not None:
-                        ui_controller.hide()
-
-                    text = speech_to_text()
-
-                    if text:
-                        print(f"Command: {text}")
-
-                        intent = intent_classifier.classify_local(text)
-
-                        result = action_registry.dispatch(ActionRequest(name=intent))
-                        if result.data.get("exit"):
-                            return
-
-                    # Hide UI after processing the command
-                    if ui_controller is not None:
-                        ui_controller.hide()
-
-                    print("\nListening for wake words...\n")
-
-                    wake_detector.reset()
-
-                    break
-
+        assistant.run_loop()
     except KeyboardInterrupt:
         print("\nStopping...")
         exits()
 
 
-if __name__ == "__main__":
+def main() -> int:
     app = QApplication(sys.argv)
     qt_app = app
+
     response_window = FloatingWindow()
     ui_controller = UIController(response_window)
     ui_controller.show()
 
+    build_runtime()
+
     assistant_thread = Thread(target=run_assistant, daemon=True)
     assistant_thread.start()
 
-    sys.exit(app.exec_())
+    return app.exec_()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 

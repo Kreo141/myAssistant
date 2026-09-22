@@ -76,8 +76,10 @@ The current local intents are `greetings`, `lock_computer`, `shutdown_computer`,
 Start the assistant from the project directory:
 
 ```powershell
-python main.py
+python app.py
 ```
+
+The supported application entry point is `app.py`, which delegates to the modular runtime in `main.py` and keeps the public startup command stable.
 
 The microphone listener runs in a background thread while the PyQt event loop owns the overlay. Speak the configured wake phrase, wait for the acknowledgement, and then give a command. The `hey_jarvis` wake word supports general Gemini requests and screen-analysis requests.
 

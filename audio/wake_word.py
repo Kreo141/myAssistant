@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-import openwakeword
-from openwakeword.model import Model
+try:
+    import openwakeword
+    from openwakeword.model import Model
+except Exception as exc:  # pragma: no cover - environment-specific import issue
+    openwakeword = None
+    Model = None
+    _OPENWAKEWORD_IMPORT_ERROR = exc
+else:
+    _OPENWAKEWORD_IMPORT_ERROR = None
 
 
 class WakeWordDetector:
@@ -17,6 +24,13 @@ class WakeWordDetector:
         download_models: bool = True,
     ) -> None:
         if model is None:
+            if Model is None or openwakeword is None:
+                raise RuntimeError(
+                    "OpenWakeWord is not available in this environment. "
+                    "Install the wake-word dependency or provide a mocked model "
+                    "when testing."
+                ) from _OPENWAKEWORD_IMPORT_ERROR
+
             if download_models:
                 openwakeword.utils.download_models()
             model = Model(

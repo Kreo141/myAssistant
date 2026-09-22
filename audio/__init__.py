@@ -3,7 +3,6 @@
 from .microphone import Microphone
 from .speech_to_text import SpeechToTextService
 from .text_to_speech import GeminiTTSProvider, GoogleTTSProvider, TextToSpeechService
-from .wake_word import WakeWordDetector
 
 __all__ = [
 	"GeminiTTSProvider",
@@ -11,5 +10,11 @@ __all__ = [
 	"Microphone",
 	"SpeechToTextService",
 	"TextToSpeechService",
-	"WakeWordDetector",
 ]
+
+
+def __getattr__(name):
+    if name == "WakeWordDetector":
+        from .wake_word import WakeWordDetector
+        return WakeWordDetector
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
