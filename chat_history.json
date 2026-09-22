@@ -1,0 +1,146 @@
+{
+    "session_76bf50bf5b": {
+        "title": "Initial AI Greeting",
+        "history": [
+            {
+                "parts": [
+                    {
+                        "text": "Hello"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "Hello! How can I help you today?"
+                    }
+                ],
+                "role": "model"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "nothing"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "Alright! Let me know if you need anything later. Have a great day!",
+                        "thought_signature": "El4KXAFpFH0TtTjWYk1FGwX0OyWe1DaHpXkrLFMzQB1f5xDh4ULsx91we5SyRz0xWZKse+7h3k2NP2EVii4a+gJfO1IZ19QLL2cLMPWGjGeGPkGiI5oUlf4WPFwZ1PNC"
+                    }
+                ],
+                "role": "model"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "hehe"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "\ud83d\ude01 \n\nWhat's making you chuckle? Or are we just sharing good vibes today?",
+                        "thought_signature": "El4KXAFpFH0T8qnQZmWQSQIAujlxlYRSac3EouutrrJORWts9LiOQjtZvRpnXwXgHhqUXrzvge2sjpHHsE3odwfqH0AB963q8mhrAKUDfl7ZjzAskBGYDKjpzwq00Ehh"
+                    }
+                ],
+                "role": "model"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "what's the captial of france?"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "The capital of France is Paris! \ud83d\uddfc",
+                        "thought_signature": "El4KXAFpFH0TKajqnw9LOl6RxpJZ+2sDPsVEMoFwgh7npu4vfqflJ1Lhg/TXehOW/hxbnAPbQtF4WsUHg9OTmGGgzU7nM0lFaaX5nFDn5EJu7nQslDf/bZobUcXab314"
+                    }
+                ],
+                "role": "model"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "bonjour"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "Bonjour ! Comment \u00e7a va ?",
+                        "thought_signature": "El4KXAFpFH0TpNuM6Hw9ueoepr16V/z6B7D/tezFfKTS0eimdFG5coqKGRxSWL6FOxVcsHARTTvieZ3TyWq5bRB5/2bbDWz/XeslnMlSA1m8XPunV2v9VYqEiMGQL0qQ"
+                    }
+                ],
+                "role": "model"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "give me a code for printing hello on every programming language limit 5 language"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "Here is how to print \"Hello\" in 5 different programming languages:\n\n**1. Python**\n```python\nprint(\"Hello\")\n```\n\n**2. JavaScript**\n```javascript\nconsole.log(\"Hello\");\n```\n\n**3. C++**\n```cpp\n#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << \"Hello\" << endl;\n    return 0;\n}\n```\n\n**4. Java**\n```java\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello\");\n    }\n}\n```\n\n**5. Ruby**\n```ruby\nputs \"Hello\"\n```",
+                        "thought_signature": "El4KXAFpFH0T5oNgLO6obC/i9fgt3YPHjVbrRJPyQ8YOA6a+HOixnmDg6xYsdyT3q8NJi7OvSXXauM28vjK3df5OY2qXQvdP0YJla+OIgaTFTJjJiMZOIyGsqqg4yBaD"
+                    }
+                ],
+                "role": "model"
+            }
+        ]
+    },
+    "session_98f0f50cb2": {
+        "title": "Bisaya Inquiry Response",
+        "history": [
+            {
+                "parts": [
+                    {
+                        "text": "unsa mana?"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "Unsa man pud ang atoang gihisgutan karon? Sultihi lang ko unsa akong matabang nimo!"
+                    }
+                ],
+                "role": "model"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "unsay gwapa, ako or ikaw?"
+                    }
+                ],
+                "role": "user"
+            },
+            {
+                "parts": [
+                    {
+                        "text": "Hahaha! Siyempre, **ikaw** gyud, oy! \n\nGwapa ko sa porma sa AI, pero ikaw gyud ang naay tinuod nga kaanyag, kay tawo man ka\u2014naa pay apil ang nindot nga batasan! \ud83c\udf38\u2728",
+                        "thought_signature": "El4KXAFpFH0TGarQ85PnRMaey2UJy3Ecru2ul7e//F6XsydzNraCcbdIqATw1qBKNTaCfoxC9g1RqkjViq31y8S421bN11zcytamu7p+SJnb7Z2OlTQ/rPC25kEyD5D5"
+                    }
+                ],
+                "role": "model"
+            }
+        ]
+    }
+}

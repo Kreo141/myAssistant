@@ -1,7 +1,5 @@
-import os
 import win32gui
 import win32con
-import configparser
 import json
 import pyaudio
 import numpy as np
@@ -20,30 +18,26 @@ from openwakeword.model import Model
 from myGUI import FloatingWindow
 from google import genai
 from google.genai import types
-from dotenv import load_dotenv
 from text_to_speech import TextToSpeechGenerator
+from config.settings import Settings
+from utils.logging import configure_logging
+from utils.paths import ProjectPaths
 
-load_dotenv()
-my_api_key = os.getenv("GEMINI_API_KEY")
+configure_logging()
+paths = ProjectPaths.discover()
+settings = Settings.load(paths)
+my_api_key = settings.require_gemini_api_key()
 
-if not my_api_key:
-    print("Uh oh! Python still can't find the API key.")
-    exit(1)
-else:
-    # Pass it explicitly into the client
-    client = genai.Client(api_key=my_api_key)
-    print("Gemini Client connected successfully!")
+client = genai.Client(api_key=my_api_key)
+print("Gemini Client connected successfully!")
 
 # ---------------- CONFIG
 
-config = configparser.ConfigParser()
-config.read("config.ini")
-
-wakePhrase = config["Main"]["wakephrase"]
-general_system_prompt = config["Main"]["general_system_prompt"]
-gemini_model = config["Main"]["gemini_model"]
+wakePhrase = settings.wake_phrase
+general_system_prompt = settings.general_system_prompt
+gemini_model = settings.gemini_model
 # vision_system_prompt = config["Main"]["vision_system_prompt"]
-use_gemini_tts = config.getboolean("Main", "gemini_tts", fallback=False)
+use_gemini_tts = settings.gemini_tts
 
 vision_system_prompt = """
 You are the action-planning module of an AI assistant.
@@ -321,16 +315,16 @@ def analyze_screen_with_gemini(prompt):
 # ---------------- MAIN LOOP
 
 def run_assistant():
-    with open("intentClassificationModel/models/intent_model_intent.pkl", "rb") as f:
+    with open(paths.intent_model_dir / "intent_model_intent.pkl", "rb") as f:
         intent_model = pickle.load(f)
 
-    with open("intentClassificationModel/models/vectorizer_intent.pkl", "rb") as f:
+    with open(paths.intent_model_dir / "vectorizer_intent.pkl", "rb") as f:
         vectorizer = pickle.load(f)
 
-    with open("intentClassificationModel/models/intent_model_genai_task_intent.pkl", "rb") as f:
+    with open(paths.intent_model_dir / "intent_model_genai_task_intent.pkl", "rb") as f:
         genai_task_intent_model = pickle.load(f)
 
-    with open("intentClassificationModel/models/vectorizer_genai_task_intent.pkl", "rb") as f:
+    with open(paths.intent_model_dir / "vectorizer_genai_task_intent.pkl", "rb") as f:
         genai_task_vectorizer = pickle.load(f)
     
     try:

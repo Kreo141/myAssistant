@@ -4,3 +4,5 @@ test.py
 __pycache__
 .vscode
 promptBuilder/
+credentials.json
+test_2.py

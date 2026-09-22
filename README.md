@@ -124,17 +124,28 @@ The code also loads `hey_jarvis` as a second wake-word model. The configured phr
 ## Project Layout
 
 ```text
-main.py                              Audio loop, routing, and assistant lifecycle
-myGUI.py                             Transparent response overlay, wake wave, and scan animation
-text_to_speech.py                    Optional Gemini TTS helper
-pyautogui                             Desktop screenshot capture dependency
-config.ini                           Runtime configuration
+main.py                              Current application entry point and runtime loop
+config/                              Typed application settings
+core/                                Shared data contracts, states, and exceptions
+utils/                               Project paths and logging helpers
+audio/                               Planned audio service boundary
+ai/                                  Planned AI service boundary
+actions/                             Planned local action boundary
+storage/                             Planned persistence boundary
+ui/                                  Planned UI boundary
+orchestration/                       Planned assistant coordination boundary
+tests/                               Configuration and path tests
+myGUI.py                             Current transparent response overlay
+text_to_speech.py                    Current optional Gemini TTS helper
+config.ini                           Active runtime configuration
 requirements.txt                     Python dependencies
 intentClassificationModel/
     intent.json                         Local intent examples
     intent_train.py                     TF-IDF and Logistic Regression training
     models/                             Serialized classifier and vectorizer
 ```
+
+The modular directories are being introduced incrementally. Phase 1 currently provides the `config`, `core`, and `utils` foundations; the remaining boundaries will be migrated in later phases.
 
 ## Troubleshooting
 
