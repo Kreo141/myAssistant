@@ -1,26 +1,23 @@
 import win32gui
 import win32con
-import json
-import pyaudio
 import numpy as np
-import openwakeword
-import speech_recognition as sr
-from gtts import gTTS
-import pygame
-import io
-import pickle
 import ctypes
 import sys
-import pyautogui
 from threading import Event, Thread
 from PyQt5.QtWidgets import QApplication
-from openwakeword.model import Model
 from myGUI import FloatingWindow
-from google import genai
-from google.genai import types
-from text_to_speech import TextToSpeechGenerator
+from ai.gemini_client import GeminiClient
+from ai.intent_classifier import IntentClassifier
+from ai.response_parser import ResponseParser
+from ai.vision_analyzer import VisionAnalyzer
+from audio.microphone import Microphone
+from audio.speech_to_text import SpeechToTextService
+from audio.text_to_speech import TextToSpeechService
+from audio.wake_word import WakeWordDetector
 from config.settings import Settings
+from core.exceptions import AIServiceError
 from utils.logging import configure_logging
+from utils.audio_utils import pcm_to_audio_data
 from utils.paths import ProjectPaths
 
 configure_logging()
@@ -28,7 +25,7 @@ paths = ProjectPaths.discover()
 settings = Settings.load(paths)
 my_api_key = settings.require_gemini_api_key()
 
-client = genai.Client(api_key=my_api_key)
+gemini_client = GeminiClient(api_key=my_api_key)
 print("Gemini Client connected successfully!")
 
 # ---------------- CONFIG
@@ -99,38 +96,56 @@ STRICT OUTPUT RULES:
 
 # ---------------- WAKE WORD
 
-openwakeword.utils.download_models()
-
-wake_model = Model(
-    wakeword_models=[wakePhrase, "hey_jarvis"],
-    vad_threshold=0.5
+wake_detector = WakeWordDetector(
+    wake_words=[wakePhrase, "hey_jarvis"],
+    vad_threshold=0.5,
 )
 
 # ---------------- AUDIO
 
 CHUNK = 1024
-FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
 SPEECH_ENERGY_THRESHOLD = 500
 SILENCE_AFTER_SPEECH_SECONDS = 1.0
 MAX_COMMAND_SECONDS = 5.0
 
-audio = pyaudio.PyAudio()
-
-mic_stream = audio.open(
-    format=FORMAT,
+microphone = Microphone(
+    chunk_size=CHUNK,
     channels=CHANNELS,
-    rate=RATE,
-    input=True,
-    frames_per_buffer=CHUNK
+    sample_rate=RATE,
 )
 
-recognizer = sr.Recognizer()
+speech_to_text_service = SpeechToTextService()
 response_window = None
 qt_app = None
 stop_event = Event()
 is_exiting = False
+
+
+def update_response_window(text):
+    if response_window is not None:
+        response_window.set_response(text)
+
+
+def update_scan_state(enabled):
+    if response_window is not None:
+        response_window.trigger_scan(enabled)
+
+
+tts_service = TextToSpeechService(
+    use_gemini=use_gemini_tts,
+    gemini_api_key=my_api_key,
+    response_callback=update_response_window,
+)
+
+vision_analyzer = VisionAnalyzer(
+    gemini_client=gemini_client,
+    response_parser=ResponseParser(),
+    model=gemini_model,
+    system_instruction=vision_system_prompt,
+    scan_callback=update_scan_state,
+)
 
 #---------------- EXIT FUNCTION
 
@@ -148,12 +163,9 @@ def exits():
         response_window.set_visible(False)
 
     try:
-        if mic_stream.is_active():
-            mic_stream.stop_stream()
-        mic_stream.close()
+        microphone.close()
     finally:
-        audio.terminate()
-        pygame.mixer.quit()
+        tts_service.close()
         if qt_app is not None:
             qt_app.quit()
 
@@ -163,81 +175,21 @@ def exits():
 def speech_to_text():
     print("\nListening for your command...")
 
-    frames = []
-    speech_started = False
-    silence_duration = 0.0
-    chunk_duration = CHUNK / RATE
-
-    for _ in range(int(MAX_COMMAND_SECONDS / chunk_duration)):
-        data = mic_stream.read(CHUNK, exception_on_overflow=False)
-        frames.append(data)
-
-        samples = np.frombuffer(data, dtype=np.int16)
-        energy = np.sqrt(np.mean(samples.astype(np.float32) ** 2))
-
-        if energy >= SPEECH_ENERGY_THRESHOLD:
-            speech_started = True
-            silence_duration = 0.0
-        elif speech_started:
-            silence_duration += chunk_duration
-            if silence_duration >= SILENCE_AFTER_SPEECH_SECONDS:
-                break
-
-    # Convert recorded data into SpeechRecognition AudioData
-    raw_audio = b"".join(frames)
-
-    audio_data = sr.AudioData(
-        raw_audio,
-        RATE,
-        2
+    raw_audio = microphone.record_command(
+        max_seconds=MAX_COMMAND_SECONDS,
+        energy_threshold=SPEECH_ENERGY_THRESHOLD,
+        silence_after_seconds=SILENCE_AFTER_SPEECH_SECONDS,
     )
+    audio_data = pcm_to_audio_data(raw_audio, RATE, 2)
 
     print("Processing transcription...")
-
-    try:
-        text = recognizer.recognize_google(audio_data)
-        print(f"You said: {text}")
-        return text
-
-    except sr.UnknownValueError:
-        print("Could not understand the audio.")
-
-    except sr.RequestError as e:
-        print(f"Google Speech Recognition error: {e}")
-
-    return None
+    return speech_to_text_service.transcribe(audio_data)
 
 
 # ---------------- TEXT TO SPEECH
 
 def text_to_speech(text):
-    if response_window is not None:
-        response_window.set_response(text)
-
-    if use_gemini_tts:
-        try:
-            audio_data = TextToSpeechGenerator.generate(text)
-            audio_stream = io.BytesIO(audio_data)
-        except Exception as error:
-            print(f"[ERROR] Gemini TTS failed, using Google TTS: {error}")
-            audio_stream = io.BytesIO()
-            gTTS(text=text, lang="en").write_to_fp(audio_stream)
-            audio_stream.seek(0)
-    else:
-        tts = gTTS(text=text, lang="en")
-        audio_stream = io.BytesIO()
-        tts.write_to_fp(audio_stream)
-        audio_stream.seek(0)
-
-    # 5. Init mixer
-    pygame.mixer.init()
-
-    # 6. Load audio and play
-    pygame.mixer.music.load(audio_stream)
-    pygame.mixer.music.play()
-
-    while pygame.mixer.music.get_busy():
-        pygame.time.wait(100)
+    tts_service.speak(text)
 
 
 # ---------------- CONFIRM ACTION
@@ -261,81 +213,23 @@ def close_window(hwnd, extra):
 
 # ---------------- GENERAL ACTION FUNCTION
 def general_action(parsed_data):
-    response_text = parsed_data["data"].get("response")
+    response_text = parsed_data.data.get("response")
     text_to_speech(response_text)
 
-
-
-
-# ---------------- GENERAL ASSISTANT FUNCTION
-
-
-
-# ---------------- VISION ASSISSTANT FUNCTION
-def analyze_screen_with_gemini(prompt):
-    screenshot = pyautogui.screenshot()
-
-    image_buffer = io.BytesIO()
-
-    screenshot.save(image_buffer, format="JPEG")
-
-    image_bytes = image_buffer.getvalue()
-
-    model = gemini_model
-    contents = [
-        types.Content(
-            role="user",
-            parts=[
-                types.Part.from_bytes(
-                    mime_type="image/png",
-                    data=image_bytes,
-                ),
-                types.Part.from_text(
-                    text=
-                    f"SYSTEM INSTRUCTION: {vision_system_prompt}\n USER PROMPT: {prompt}"),
-            ],
-        ),
-    ]
-
-    response_window.trigger_scan(True)
-
-    interaction = client.models.generate_content(
-        model=model,
-        contents=contents
-    )
-
-    print("[LOG]: " + str(interaction))
-    response_text = interaction.text if interaction.text else "No response from Gemini."
-
-    response_window.trigger_scan(False)
-    return response_text
 
 
 
 # ---------------- MAIN LOOP
 
 def run_assistant():
-    with open(paths.intent_model_dir / "intent_model_intent.pkl", "rb") as f:
-        intent_model = pickle.load(f)
-
-    with open(paths.intent_model_dir / "vectorizer_intent.pkl", "rb") as f:
-        vectorizer = pickle.load(f)
-
-    with open(paths.intent_model_dir / "intent_model_genai_task_intent.pkl", "rb") as f:
-        genai_task_intent_model = pickle.load(f)
-
-    with open(paths.intent_model_dir / "vectorizer_genai_task_intent.pkl", "rb") as f:
-        genai_task_vectorizer = pickle.load(f)
+    intent_classifier = IntentClassifier(paths.intent_model_dir)
     
     try:
         print("\nListening for wake words...\n")
 
         while not stop_event.is_set():
             # Read microphone
-            data = mic_stream.read(
-                CHUNK,
-                exception_on_overflow=False
-            )
+            data = microphone.read_chunk()
 
             audio_data = np.frombuffer(
                 data,
@@ -343,12 +237,10 @@ def run_assistant():
             )
 
             # Run wake-word detection
-            wake_model.predict(audio_data)
+            wake_scores = wake_detector.predict(audio_data)
 
             # Check wake word
-            for mdl in wake_model.prediction_buffer.keys():
-                scores = list(wake_model.prediction_buffer[mdl])
-                score = scores[-1]
+            for mdl, score in wake_scores.items():
 
                 if mdl == "hey_jarvis" and score > 0.5:
                     print(f"\n(Jarvis) Wakeword detected! Score: {score:.3f}")
@@ -361,8 +253,7 @@ def run_assistant():
                     command = speech_to_text()
                     
                     if command:
-                        X = genai_task_vectorizer.transform([command])
-                        genai_intent = genai_task_intent_model.predict(X)[0]
+                        genai_intent = intent_classifier.classify_gemini_task(command)
 
                         print(f"[{genai_intent}] Command: {command}")
 
@@ -371,16 +262,12 @@ def run_assistant():
                             try:
                                 response_window.set_visible(True)
                                 text_to_speech("Thinking...")
-                                interaction = client.interactions.create(
+                                response_text = gemini_client.generate_chat(
                                     model=gemini_model,
-                                    input=command,
-                                    system_instruction=general_system_prompt
+                                    prompt=command,
+                                    system_instruction=general_system_prompt,
                                 )
-                                response_text = interaction.output_text
-    
-                                if not response_text:
-                                    raise RuntimeError("Gemini returned an empty response")
-    
+
                                 print("[LOG] Gemini Response:", response_text)
                                 text_to_speech(response_text)
                             except Exception as error:
@@ -388,19 +275,19 @@ def run_assistant():
                                 text_to_speech("I could not get a response from Gemini.")
                                 
                         elif genai_intent == "analyze_screen":
-                            # Implement: Analyze the screen content and provide insights
-                            response = analyze_screen_with_gemini(command)
+                            try:
+                                action_request = vision_analyzer.analyze(command)
+                                print("[LOG] Gemini action:", action_request)
 
-                            print("[LOG] Gemini Response:", response)
+                                if action_request.name == "describe_screen":
+                                    general_action(action_request)
 
-                            parsed_data = json.loads(response)
-
-                            if parsed_data.get("action") == "describe_screen":
-                                general_action(parsed_data)
-
-                            if parsed_data.get("action") == "add_calendar":
-                                # Implement: Add event to calendar
-                                print()
+                                if action_request.name == "add_calendar":
+                                    # Implement: Add event to calendar
+                                    print()
+                            except AIServiceError as error:
+                                print(f"[ERROR] Vision request failed: {error}")
+                                text_to_speech("I could not analyze the screen.")
                         
 
                     # Hide UI after processing the command
@@ -408,7 +295,7 @@ def run_assistant():
 
                     print("\nListening for wake words...\n")
 
-                    wake_model.reset()
+                    wake_detector.reset()
 
                     break
 
@@ -426,8 +313,7 @@ def run_assistant():
                     if text:
                         print(f"Command: {text}")
 
-                        X = vectorizer.transform([text])
-                        intent = intent_model.predict(X)[0]
+                        intent = intent_classifier.classify_local(text)
 
                         if intent == "greetings":
                             text_to_speech("Hello! How can I assist you?")
@@ -459,7 +345,7 @@ def run_assistant():
 
                     print("\nListening for wake words...\n")
 
-                    wake_model.reset()
+                    wake_detector.reset()
 
                     break
 
