@@ -6,3 +6,6 @@ __pycache__
 promptBuilder/
 credentials.json
 test_2.py
+chat_history.json
+assistant.db
+assistant.db-*

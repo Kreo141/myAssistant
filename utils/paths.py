@@ -31,5 +31,9 @@ class ProjectPaths:
         return self.root / "chat_history.json"
 
     @property
+    def database_file(self) -> Path:
+        return self.root / "assistant.db"
+
+    @property
     def credentials_file(self) -> Path:
         return self.root / "credentials.json"

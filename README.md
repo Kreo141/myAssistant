@@ -128,10 +128,10 @@ main.py                              Current application entry point and runtime
 config/                              Typed application settings
 core/                                Shared data contracts, states, and exceptions
 utils/                               Project paths and logging helpers
-audio/                               Planned audio service boundary
-ai/                                  Planned AI service boundary
+audio/                               Audio input and speech service boundary
+ai/                                  Gemini, classifier, and vision service boundary
 actions/                             Planned local action boundary
-storage/                             Planned persistence boundary
+storage/                             JSON repository and SQLite database boundary
 ui/                                  Planned UI boundary
 orchestration/                       Planned assistant coordination boundary
 tests/                               Configuration and path tests
@@ -145,7 +145,9 @@ intentClassificationModel/
     models/                             Serialized classifier and vectorizer
 ```
 
-The modular directories are being introduced incrementally. Phase 1 currently provides the `config`, `core`, and `utils` foundations; the remaining boundaries will be migrated in later phases.
+The modular directories are being introduced incrementally. Phases 1 through 5 currently provide the `config`, `core`, `utils`, `audio`, `ai`, and `storage` foundations; local actions, UI extraction, and orchestration remain in later phases.
+
+`chat_history.json` remains the active storage format for now. The `storage/database.py` SQLite boundary and `assistant.db` path are prepared for a later migration, but the assistant does not create or use the database yet.
 
 ## Troubleshooting
 
