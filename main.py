@@ -124,9 +124,12 @@ STRICT OUTPUT RULES:
 - The response must be directly parseable using Python's json.loads().
 """
 
+    from audio.wake_word import WakeWordDetector
+
     wake_detector = WakeWordDetector(
         wake_words=[wakePhrase, "hey_jarvis"],
         vad_threshold=0.5,
+        use_native=False,
     )
 
     microphone = Microphone(
